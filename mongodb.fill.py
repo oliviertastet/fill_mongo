@@ -683,11 +683,11 @@ config_MTB = {
 		'file' : [
 		{	
 			'condition' : 'Stimulated',
-			'file' : 'asso.stim.MTB.csv'
+			'file' : 'asso.csv'
 		},
 		{
 			'condition' : 'Not Stimulated',
-			'file' : 'asso.not_stim.MTB.csv'
+			'file' : 'asso_not.csv'
 		}
 
 		]
@@ -771,18 +771,15 @@ class Gene(Document):
 
 # An association is defined by the snp_id and the ensembl_gene_id + external_gene_id. The field association contains, for each condition in each projet
 # the slope of the reqtl and the pvalue of the association in the form of a dictionnary
-# class Association_condition(Document):
-# 	condition = StringField()
-# 	estimate = StringField()
-# 	pval = StringField()
-# 	type = StringField()
-
-class Association_value(Document):
-	project_name = StringField()
+class Association_condition(Document):
 	condition = StringField()
 	estimate = StringField()
 	pval = StringField()
 	type = StringField()
+
+class Association_value(Document):
+	project_name = StringField()
+	conditions = ListField(DocumentField(Association_condition),db_field='conditions')
 
 class Association(Document):
 	config_collection_name = "associations"
@@ -819,13 +816,39 @@ def add_associations(config):
 				'pval':line[7],
 				'asso_type':line[8]
 			}
-			asso_con = Association_value()
-			asso_con.condition = con
-			asso_con.project_name = config['project_name']
-			asso_con.estimate = this_asso['estimate']
-			asso_con.pval = this_asso['pval']
-			asso_con.type = this_asso['asso_type']
-			a = Association(snp_id=this_asso['snp_id'],ensembl_gene_id=this_asso['ensembl_gene_id'],external_gene_id=this_asso['external_gene_id'], association=[asso_con])
+			q = session.query(Association).filter({'ensembl_gene_id':this_asso['ensembl_gene_id']},{'snp_id':this_asso['snp_id']})
+			if len(q.all())==0:
+				assoCondition = Association_condition(condition=con,estimate=this_asso['estimate'],pval=this_asso['pval'],type=this_asso['asso_type'])
+				assoProject = Association_value(project_name=config['project_name'],conditions=[assoCondition])
+				newAssociation = Association(snp_id=this_asso['snp_id'],ensembl_gene_id=this_asso['ensembl_gene_id'],external_gene_id=this_asso['external_gene_id'],association=[assoProject])
+				session.save(newAssociation)
+			else:
+				q = q.one()
+				newProject = True
+				for a in q.association:
+				    if a.project_name==config['project_name']:
+				            ass_con = Association_condition(condition=con,estimate = this_asso['estimate'], pval= this_asso['pval'], type=this_asso['asso_type'])
+				            a.conditions.append(ass_con)
+				            newProject = False
+				            session.save(q)
+				            continue
+				            
+				if newProject:
+					assoCondition = Association_condition(condition=con,estimate=this_asso['estimate'],pval=this_asso['pval'],type=this_asso['asso_type'])
+					assoProject = Association_value(project_name=config['project_name'],conditions=[assoCondition])
+					q.append('association',assoProject).execute()
+			# asso_con = Association_value()
+			# asso_con.condition = con
+			# asso_con.project_name = config['project_name']
+			# asso_con.estimate = this_asso['estimate']
+			# asso_con.pval = this_asso['pval']
+			# asso_con.type = this_asso['asso_type']
+			# a = Association(snp_id=this_asso['snp_id'],ensembl_gene_id=this_asso['ensembl_gene_id'],external_gene_id=this_asso['external_gene_id'], association=[asso_con])
+			
+
+
+
+
 			# asso_project.conditions.append(asso_con)
 			# if first:
 				# a_p = Association_value(project_name=config['project_name'],conditions = [])
@@ -845,11 +868,11 @@ def add_associations(config):
 					# a = Association(snp_id = this_asso['snp_id'], ensembl_gene_id=this_asso['ensembl_gene_id'], external_gene_id = this_asso['external_gene_id'], association=[a_p])
 					# ass.append(a)
 		# first = False
-			associations = session.query(Association).filter({'snp_id':it['snp_id'], 'ensembl_gene_id':it['ensembl_gene_id']})
-			if len(associations.all())==0:
-				session.save(a)
-			else:
-				associations.append('association',asso_con).execute()
+			# associations = session.query(Association).filter({'snp_id':it['snp_id'], 'ensembl_gene_id':it['ensembl_gene_id']})
+			# if len(associations.all())==0:
+			# 	session.save(a)
+			# else:
+			# 	associations.append('association',asso_con).execute()
 	print 'Done'
 # def add_associations(config):
 # 	session = Session.connect('immunio')				
